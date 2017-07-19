@@ -1,0 +1,149 @@
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+% \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading nips_2017
+%
+% to avoid loading the natbib package, add option nonatbib:
+% \usepackage[nonatbib]{nips_2017}
+
+% to anonymize authors, use the following and not the [final] variant
+%\usepackage{nips_2017}
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+\usepackage[final]{nips_2017}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{color}          % color text. Using for TODO and comments.
+
+\title{Distributing Entity Resolution in Probabilistic Soft Logic}
+
+% The \author macro works with any number of authors. There are two
+% commands used to separate the names and addresses of multiple
+% authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to
+% break the lines. Using \AND forces a line break at that point. So,
+% if LaTeX puts 3 of 4 authors names on the first line, and the last
+% on the second line, try using \AND instead of \And before the third
+% author name.
+
+\author{
+  Eriq Augustine \\
+%  University of California, Santa Cruz\\
+%  1156 High St\\
+%  Santa Cruz, CA 95064\\
+  \texttt{eaugusti@ucsc.edu} \\
+  %% examples of more authors
+\And
+ Nikhil Kini \thanks{Equal authorship} \\
+% University of California, Santa Cruz\\
+% 1156 High St\\
+% Santa Cruz, CA 95064\\
+ \texttt{nkini@ucsc.edu} \\
+  %% \AND
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+  %% \And
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+  %% \And
+  %% Coauthor \\
+  %% Affiliation \\
+  %% Address \\
+  %% \texttt{email} \\
+}
+
+%LISE:
+%Project proposals should be two pages long.    They should contain a statement of the problem (independent of data used), a statement of the approach, a description of the data, and a description of how you intend to present the results.  Include a weekly timeline, where the timeline includes getting basic results within the next week.  Include a discussion of any potential issues, and backup plans.  Also include any references.
+%Obviously, since this is a proposal, some of these may change as we go along.   But key now is to get things down on paper, and then hopefully soon we’ll be hearing about some results!
+
+\begin{document}
+% \nipsfinalcopy is no longer used
+
+\maketitle
+
+%\begin{abstract}
+  
+%\end{abstract}
+
+% Improving computational performance, perhaps at the cost of accuracy
+% Comparisons:
+%    Compare one machine PSL vs distributed PSL
+%    Possibly compare Felix with distributed PSL
+%    Graph compression vs recall 
+%    Compression vs runtimes/accuracy
+%    Recall vs runtimes/accuracy
+
+
+
+\section{Problem Statement}
+Probabilistic Soft Logic (PSL) is a statistical relational learning framework that aims to simplify and unify the machine learning goals of modeling richly structured data and scaling to big data. PSL scales linearly with the number of groundings. However, given the model rules, PSL performs a cross product of all possible assignments to the random variables in the rules. This results in space complexity polynomial in the number of random variable values in a rule, making it difficult to process a dataset on a single machine due to memory problems. The MAP inference algorithm in PSL already uses consensus optimization, which lends itself nicely to parallelization. However, distributing the dataset horizontally across computers requires non-trivial partitioning of data that balances the size of the partitions with the preservation of relational edges in the data. We study the scalability of PSL in an Entity Resolution (ER) setting, comparing data partitioning/clustering techniques.
+
+\section{Approach}
+
+We will begin by constructing a baseline ER PSL model. This model will be used with both the distributed and non-distributed systems. Towards using the distributed systems variant, we will create a custom ADMM implementation for use within PSL. Distribution naturally requires partitioning the data, and as a means of partitioning, we will implement blocking algorithms available in ER/Record Linkage literature. Candidates include standard blocking, canopies, iterative blocking, and adaptive blocking. Blocking is very domain dependent, and not all kinds of blocking will perform well with all kinds of datasets.
+
+Once we have our blocks, we will assign them to nodes in the cluster. Note that generally, we will have more blocks than nodes in our cluster, and hence an optimal assignment of blocks to nodes is a discrete-knapsack style NP-Complete problem. Also, note that blocks may or may not overlap in the references that they contain. Regardless, there will need to be message passing between the nodes for ADMM to reach a consensus. 
+
+\section{Data}
+
+There are two datasets we plan on using for this project: bibliographic data and web logs.
+
+The entity resolution literature has several often-used bibliographic datasets, used especially in the study of blocking techniques. A benefit of this data is the wealth of existing comparisons. A disadvantage is that existing data may not be large enough to merit distribution across multiple machines. The database group Leipzig hosts some bibliographic ER datasets\cite{kopcke2010evaluation}. \url{https://dbs.uni-leipzig.de/en/research/projects/object_matching/fever/benchmark_datasets_for_entity_resolution}. 
+
+Details about the datasets are on this \href{https://dbs.uni-leipzig.de/de/research/projects/object_matching/fever/benchmark_datasets_for_entity_resolution}{page}\footnote{\url{https://dbs.uni-leipzig.de/de/research/projects/object_matching/fever/benchmark_datasets_for_entity_resolution}}. There are four datasets from this group -- two bibliographic and two e-commerce. Each dataset is comprised of two different databases (simple, single table), of possibly the same entities (academic paper or shopping product), so that the entity resolution problem manifests as a record linkage problem. The attributes are \{title, authors, venue, year\} for the bibliographic databases, and \{name, description, manufacturer, price\} for the E-commerce databases. Some observations about the datasets:
+\begin{itemize}
+    \item Overall impression: These are decent datasets for testing, but certainly too small for any scalability experiments. They're also less cleaner than we'd like them to be.
+    \item Missing / incorrect data: The Scholar database in the DBLP-Scholar dataset has over 50\% records missing their year field, and some have incorrect years like 0, 20, 2703. We think this explains the poor recall. Similarly, in the Amzn-Goog dataset, under 10\% of the Goog database has a value for manufacturer. The Abt database in the Abt-Buy dataset is missing the manufacturer attribute completely. We improvised a column noticing that the first word of the name field in the record was consistently the brand/manufacturer.
+    \item Limited range: The bibliographic data seems to be limited to about ten years and a handful of venues only.
+    \item Some pandas related exploration of the dataset is available on github \footnote{\url{https://github.com/nkini/scaling-psl-for-ER/blob/master/Analysis-LeipzigDatasets.ipynb}}
+\end{itemize}
+
+We also want to use real-world data in the form of cross-device visitor web logs, courtesy of Adobe Systems Inc. Adobe's data contains web log entries of visits to a media website collected over 20 days. Not all visitors signed into their account for their web sessions. Each visit is a mention and is identified by a cookie ID. The portion of these visits that logged in comprise the ground truth entity labels. That is, each individual entity is identified by a login ID. The ER problem is mapping the cookie IDs to the corresponding login IDs. Note that there can be several cookie IDs associated with a login IDs, which makes it an ER problem; but it is made challenging by the fact that such multi-cookie logins constitute a very small portion of the dataset. Some statistics:
+    \begin{itemize}
+        \item Mean number of cookies $\approx$ 1.4million
+        \item Mean number of login IDs = 10443
+        \item Mean number of login IDs with 2 or more cookies = 1392
+    \end{itemize}
+The mean is over 10 partitions of the dataset, where partitioning ensured that there was no overlap of cookies and login IDs. There are around 70 such partitions, but we use 10 for now. The partitions are good for use for cross-validation. 
+
+\section{Proposed evaluation}
+
+In terms of comparisons, we mainly want to compare distributed PSL for runtimes and precision-recall metrics.
+
+The runtimes will change compared to single machine PSL because of the overhead of distribution and the additional computational cores available. However, it should be noted that much larger problems can now be solved because of the increase in available memory.
+
+Precision and recall will vary on account of blocking. Blocking introduces a trade-off between recall and compression. (1.0 - Recall) is the cost of blocking, because blocking can result in references to the same entity never getting matched. Compression, known better as ``reduction ratio'' in ER, is the percentage of comparisons saved due to blocking. 
+
+We will use existing ER systems from literature that have used the bibliographic dataset as comparisons.
+We also propose to compare Felix \cite{niu2011scaling}, a distributed MLN system, with distributed PSL. We would also like to see the effects of Compression and recall on the runtimes and precision-recall.
+
+\section{Timeline}
+\begin{itemize}
+    \item Apr 30: Run baseline PSL model and complete rework of the current ADMM reimplementation.
+    \item May 07: Complete custom ADMM implementation. Complete implementation of two blocking algorithms.
+    \item May 14: Complete distribution code. Complete the implementation of two more blocking algorithms.
+    \item May 21: Run all tests, plot the results.
+    \item May 28: Write the paper.
+    \item Jun 04: Write the paper, and create the presentation.
+\end{itemize}
+
+\section{Related work}
+There are several papers that specifically talk about distributing or parallelizing Entity Resolution problems. \cite{benjelloun2007d} and \cite{kawai2006p} presents a family of algorithms for distributing/parallelizing the ER workload across multiple processors. This is a family of algorithms because they treat the matching and record merging functions (as well as the distributing functions) as black boxes, where any relevant function of choice can be substituted. \cite{efthymiou2017parallel} introduces algorithms for Meta-blocking that use the MapReduce framework. Meta-blocking is used to clean the overlapping blocks from unnecessary comparisons. \cite{dal2011fast}'s MD-approach combines an efficient blocking method with a robust data parallel programming model for a scalable deduplication solution. \cite{malhotra2014graph} compare two distribution approaches that they call bucket-centric and record-centric with a focus on load balancing. \cite{kirsten2010data} propose different strategies to partition the input data and generate multiple match tasks that can be independently executed. \cite{kim2007parallel} study scenarios where the collections being compared/merged are clean, only one is clean, and both are dirty to exploit interplay between match and merge to achieve parallelization. \cite{rastogi2011large} propose a principled framework to scale any generic entity matching algorithm by running multiple instances of the EM algorithm on small neighborhoods of the data and passing messages across neighborhoods to construct a global solution.
+
+\bibliography{references} 
+\bibliographystyle{apalike}
+
+\end{document}
